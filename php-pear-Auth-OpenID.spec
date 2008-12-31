@@ -6,7 +6,7 @@
 Summary:	PHP OpenID
 Name:		php-pear-%{_pearname}
 Version:	2.1.2
-Release:	%mkrel 1
+Release:	%mkrel 2
 Group:		Development/PHP
 License:	Apache License
 URL:		http://www.openidenabled.com/openid/libraries/php
