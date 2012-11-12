@@ -1,0 +1,421 @@
+diff -Naurp php-openid-2.1.2/examples/server/lib/actions.php php-openid-2.1.2.oden/examples/server/lib/actions.php
+--- php-openid-2.1.2/examples/server/lib/actions.php	2008-09-09 21:12:13.000000000 +0200
++++ php-openid-2.1.2.oden/examples/server/lib/actions.php	2008-09-16 12:35:10.000000000 +0200
+@@ -30,7 +30,11 @@ function action_default()
+     $request = $server->decodeRequest();
+ 
+     if (!$request) {
+-        return about_render();
++        if (getLoggedInUser()) {
++	    return about_render();
++        } else {
++	    return login_render();
++	}
+     }
+ 
+     setRequestInfo($request);
+@@ -53,9 +57,6 @@ function action_default()
+         } else if ($request->immediate) {
+             $response =& $request->answer(false, buildURL());
+         } else {
+-            if (!getLoggedInUser()) {
+-                return login_render();
+-            }
+             return trust_render($request);
+         }
+     } else {
+@@ -93,16 +94,11 @@ function action_logout()
+  */
+ function login_checkInput($input)
+ {
+-    $openid_url = false;
+-    $errors = array();
+-
+-    if (!isset($input['openid_url'])) {
+-        $errors[] = 'Enter an OpenID URL to continue';
+-    }
+-    if (count($errors) == 0) {
+-        $openid_url = $input['openid_url'];
++    if (!isset($input['yubikey'])) {
++        return array('Enter a Yubikey to continue', false);
+     }
+-    return array($errors, $openid_url);
++    $yubikey = $input['yubikey'];
++    return checkLogin($yubikey);
+ }
+ 
+ /**
+@@ -141,7 +137,8 @@ function action_trust()
+ {
+     $info = getRequestInfo();
+     $trusted = isset($_POST['trust']);
+-    return doAuth($info, $trusted, true, @$_POST['idSelect']);
++    $yubikey = $_POST['yubikey'];
++    return doAuth($info, $trusted, true, $yubikey, @$_POST['idSelect']);
+ }
+ 
+ function action_idpage()
+diff -Naurp php-openid-2.1.2/examples/server/lib/common.php php-openid-2.1.2.oden/examples/server/lib/common.php
+--- php-openid-2.1.2/examples/server/lib/common.php	2008-09-09 21:12:13.000000000 +0200
++++ php-openid-2.1.2.oden/examples/server/lib/common.php	2008-09-16 12:35:10.000000000 +0200
+@@ -22,6 +22,7 @@ function authCancel($info)
+ }
+ 
+ function doAuth($info, $trusted=null, $fail_cancels=false,
++                $yubikey=null,
+                 $idpSelect=null)
+ {
+     if (!$info) {
+@@ -29,6 +30,13 @@ function doAuth($info, $trusted=null, $f
+         return authCancel(null);
+     }
+ 
++    list ($errors, $openid_url) = checkLogin($yubikey);
++    if (count($errors) || !$openid_url) {
++        return authCancel($info);
++    } else {
++        setLoggedInUser($openid_url);
++    }
++
+     if ($info->idSelect()) {
+         if ($idpSelect) {
+             $req_url = idURL($idpSelect);
+@@ -64,6 +72,7 @@ function doAuth($info, $trusted=null, $f
+                            'country' => 'ES',
+                            'language' => 'eu',
+                            'timezone' => 'America/New_York');
++	$sreg_data = array();
+ 
+         // Add the simple registration response values to the OpenID
+         // response message.
+diff -Naurp php-openid-2.1.2/examples/server/lib/render/about.php php-openid-2.1.2.oden/examples/server/lib/render/about.php
+--- php-openid-2.1.2/examples/server/lib/render/about.php	2008-09-09 21:12:13.000000000 +0200
++++ php-openid-2.1.2.oden/examples/server/lib/render/about.php	2008-09-16 12:35:10.000000000 +0200
+@@ -10,35 +10,50 @@ An error occurred when processing your r
+ %s
+ </div>');
+ 
++define('about_body_short',
++       '<p>
++Please log in using your Yubikey.
++</p>
++<p>You can <a href="http://www.openid.net/">read more about OpenID</a>.  
++</p>');
++
+ define('about_body',
+        '<p>
+-  This is an <a href="http://www.openid.net/">OpenID</a> server
+-  endpoint. This server is built on the <a
+-  href="http://www.openidenabled.com/openid/libraries/php">JanRain PHP OpenID
+-  library</a>. Since OpenID consumer sites will need to directly contact this
+-  server, it must be accessible over the Internet (not behind a firewall).
++  Welcome!
++<p>
++
++  There are two ways to use the Yubico OpenID server.  The simplest is
++  to go to any site which supports OpenID and log in to it using the
++  following OpenID URL:
++</p>
++<pre>
++%s
++</pre>
++<p>
++  You will then be redirected to our OpenID server, and can login to
++  the site authenticated using your YubiKey.
+ </p>
+ <p>
+-  To use this server, you will have to set up a URL to use as an identifier.
++  If you wish to use a more personal OpenID URL, you need to set up
++  your own web site and be able to modify the HTML code for it.
+   Insert the following markup into the <code>&lt;head&gt;</code> of the HTML
+-  document at that URL:
++  document at your own home page:
++</p>
++<pre>&lt;link rel="openid.server" href="%s" /&gt;
++&lt;link rel="openid.delegate" href="%s" /&gt;
++</pre>
++<p>
++  Once you have made this change, you should be able to use your own URL
++  as the OpenID URL when using any OpenID enabled site.
+ </p>
+-<pre>&lt;link rel="openid.server" href="%s" /&gt;</pre>
+ <p>
+-  Then configure this server so that you can log in with that URL. Once you
+-  have configured the server, and marked up your identity URL, you can verify
+-  that it is working by using the <a href="http://www.openidenabled.com/"
+-  >openidenabled.com</a>
++  You can verify that it is working by using the external
+   <a href="http://www.openidenabled.com/resources/openid-test/checkup">OpenID
+-  Checkup tool</a>:
+-  <form method="post"
+-        action="http://www.openidenabled.com/resources/openid-test/checkup/start">
+-    <label for="checkup">OpenID URL:
+-    </label><input id="checkup" type="text" name="openid_url" />
+-    <input type="submit" value="Check" />
+-  </form>
++  Checkup tool</a>.
+ </p>
+-');
++<p>
++  You can <a href="http://www.openid.net/">read more about OpenID</a>.  
++</p>');
+ 
+ /**
+  * Render the about page, potentially with an error message
+@@ -46,13 +61,17 @@ define('about_body',
+ function about_render($error=false, $internal=true)
+ {
+     $headers = array();
+-    $body = sprintf(about_body, buildURL());
++    $current_user = getLoggedInUser();
++    if ($current_user) {
++        $body = sprintf(about_body, idURL($current_user), buildURL(), idURL($current_user));
++    } else {
++        $body = sprintf(about_body_short);
++    }
+     if ($error) {
+         $headers[] = $internal ? http_internal_error : http_bad_request;
+         $body .= sprintf(about_error_template, htmlspecialchars($error));
+     }
+-    $current_user = getLoggedInUser();
+-    return page_render($body, $current_user, 'OpenID Server Endpoint');
++    return page_render($body, $current_user, 'Yubico OpenID Server');
+ }
+ 
+ ?>
+\ No newline at end of file
+diff -Naurp php-openid-2.1.2/examples/server/lib/render/login.php php-openid-2.1.2.oden/examples/server/lib/render/login.php
+--- php-openid-2.1.2/examples/server/lib/render/login.php	2008-09-09 21:12:13.000000000 +0200
++++ php-openid-2.1.2.oden/examples/server/lib/render/login.php	2008-09-16 12:35:10.000000000 +0200
+@@ -6,28 +6,15 @@ require_once "lib/render.php";
+ define('login_form_pat',
+        '<div class="form">
+   <p>
+-
+-    Enter your username into this form to log in to this server.  It
+-    can be anything; this is just for demonstration purposes.  For
+-    example, entering USERNAME will give you the identity URL
+-
+-    <pre>%s</pre>
++    <!-- Enter your Yubikey into this form to log in to this server. -->
++    <!-- %s -->
+   </p>
+-
+-  <form method="post" action="%s">
+-    <table>
+-      <tr>
+-        <th><label for="openid_url">Name:</label></th>
+-        <td><input type="text" name="openid_url"
+-                   value="%s" id="openid_url" /></td>
+-      </tr>
+-      <tr>
+-        <td colspan="2">
+-          <input type="submit" value="Log in" />
+-          <input type="submit" name="cancel" value="Cancel" />
+-        </td>
+-      </tr>
+-    </table>
++  <form name="login" method="post" action="%s">
++    <p>
++      <b>Yubikey:</b> <input type="yubikey" name="yubikey" id="yubikey" />
++      &nbsp;
++      <input type="submit" value="Log in" />
++    </p>
+   </form>
+ </div>
+ ');
+@@ -51,7 +38,7 @@ function login_render($errors=null, $inp
+     if ($errors) {
+         $body = loginError_render($errors) . $body;
+     }
+-    return page_render($body, $current_user, 'Log In', null, true);
++    return page_render($body, $current_user, 'Login to Yubico OpenID Server', null, true);
+ }
+ 
+ function loginError_render($errors)
+diff -Naurp php-openid-2.1.2/examples/server/lib/render/trust.php php-openid-2.1.2.oden/examples/server/lib/render/trust.php
+--- php-openid-2.1.2/examples/server/lib/render/trust.php	2008-09-09 21:12:13.000000000 +0200
++++ php-openid-2.1.2.oden/examples/server/lib/render/trust.php	2008-09-16 12:35:10.000000000 +0200
+@@ -5,17 +5,22 @@ require_once "lib/render.php";
+ 
+ define('trust_form_pat',
+        '<div class="form">
+-  <form method="post" action="%s">
+-  %s
++%s
++  <form name="login" method="post" action="%s">
++    <input autocomplete="off" type="password" name="yubikey" />
+     <input type="submit" name="trust" value="Confirm" />
++    <input type="hidden" name="trust"/>			    
++  </form>  
++  <form method="post" action="%s">
+     <input type="submit" value="Do not confirm" />
+   </form>
+ </div>
+ ');
+ 
+ define('normal_pat',
+-       '<p>Do you wish to confirm your identity ' .
+-       '(<code>%s</code>) with <code>%s</code>?</p>');
++       '<p>Confirm <!-- %s --> login to:</p>' .
++       '<p><b>%s</b></p>' .
++       '<p>by pressing button on Yubico key</p>');
+ 
+ define('id_select_pat',
+        '<p>You entered the server URL at the RP.
+@@ -43,7 +48,7 @@ function trust_render($info)
+         $prompt = sprintf(normal_pat, $lnk, $trust_root);
+     }
+ 
+-    $form = sprintf(trust_form_pat, $trust_url, $prompt);
++    $form = sprintf(trust_form_pat, $prompt, $trust_url, $trust_url);
+ 
+     return page_render($form, $current_user, 'Trust This Site');
+ }
+diff -Naurp php-openid-2.1.2/examples/server/lib/render.php php-openid-2.1.2.oden/examples/server/lib/render.php
+--- php-openid-2.1.2/examples/server/lib/render.php	2008-09-09 21:12:13.000000000 +0200
++++ php-openid-2.1.2.oden/examples/server/lib/render.php	2008-09-16 12:35:10.000000000 +0200
+@@ -5,10 +5,10 @@ define('page_template',
+   <head>
+     <meta http-equiv="cache-control" content="no-cache"/>
+     <meta http-equiv="pragma" content="no-cache"/>
+-    <title>%s</title>
+-%s
++    <title>Yubico OpenID Server - %s</title>
++    %s
+   </head>
+-  <body>
++  <body onLoad="document.login.yubikey.focus();">
+     %s
+ <div id="content">
+     <h1>%s</h1>
+@@ -17,7 +17,7 @@ define('page_template',
+   </body>
+ </html>');
+ 
+-define('logged_in_pat', 'You are logged in as %s (URL: %s)');
++define('logged_in_pat', 'You are logged in as %s <!-- URL: %s -->');
+ 
+ /**
+  * HTTP response line contstants
+@@ -65,7 +65,7 @@ function redirect_render($redir_url)
+ 
+ function navigation_render($msg, $items)
+ {
+-    $what = link_render(buildURL(), 'PHP OpenID Server');
++    $what = link_render(buildURL(), 'Yubico OpenID Server');
+     if ($msg) {
+         $what .= ' &mdash; ' . $msg;
+     }
+diff -Naurp php-openid-2.1.2/examples/server/lib/session.php php-openid-2.1.2.oden/examples/server/lib/session.php
+--- php-openid-2.1.2/examples/server/lib/session.php	2008-09-09 21:12:13.000000000 +0200
++++ php-openid-2.1.2.oden/examples/server/lib/session.php	2008-09-16 12:35:10.000000000 +0200
+@@ -97,6 +97,34 @@ function hashPassword($password)
+ }
+ 
+ /**
++ * Check the user's login information.  Return OpenID URL for user.
++ */
++function checkLogin($yubikey)
++{
++  // from config.php
++  global $yubi;
++
++  $token_size = 32;
++  $min_identity_size = 12;
++
++  if (strlen ($yubikey) < $token_size + $min_identity_size) {
++    return array(array('Authentication failure: too short input'), false);
++  }
++
++  $identity = substr ($yubikey, 0, strlen ($yubikey) - $token_size);
++  $openid_url = $identity;
++
++  $auth = $yubi->verify($yubikey);
++  if (PEAR::isError($auth)) {
++    return array(array('Authentication failure: ' . $auth->getMessage() . 
++     '<!-- Debug output from server: ' . $yubi->getLastResponse() . '-->'),
++     false);
++  }
++
++  return array(array(), $openid_url);
++}
++
++/**
+  * Get the openid_url out of the cookie
+  *
+  * @return mixed $openid_url The URL that was stored in the cookie or
+diff -Naurp php-openid-2.1.2/examples/server/openid-server.css php-openid-2.1.2.oden/examples/server/openid-server.css
+--- php-openid-2.1.2/examples/server/openid-server.css	2008-09-09 21:12:13.000000000 +0200
++++ php-openid-2.1.2.oden/examples/server/openid-server.css	2008-09-16 12:35:10.000000000 +0200
+@@ -1,11 +1,19 @@
+ body {
+     padding: 0;
+     margin: 0;
++    background: #78B002;
++    background-image: url('http://yubico.com/images/logo_home.jpg');
++    background-repeat: no-repeat;
++    background-position: 5% 15%;
+ }
+ 
+ #content {
+     padding: 0.5em;
+     max-width: 50em;
++    margin-top: 10%;
++    margin-left: 25%;
++    margin-right: 25%;
++    margin-bottom: 10%;
+ }
+ 
+ ul.error {
+@@ -20,16 +28,15 @@ ul.error {
+ }
+ 
+ div.form {
+-    border: thin solid #777777;
+-    background: #dddddd;
++    valign: center;
+     padding: 0.5em;
++    line-height: 150%;
+     margin-top: 1em;
+ }
+ 
+ div.navigation {
+-    border-bottom: thin solid #cccccc;
+-    background: #eeeeee;
+-    font-size: smaller;
++    text-align: right;
++    background: #78B002;
+     padding: 0.5em;
+ }
+ 
+@@ -71,4 +78,27 @@ th {
+ table {
+     border-collapse: collapse;
+     margin-bottom: 1em;
+-}
+\ No newline at end of file
++}
++
++.text1 {
++	font-family:verdana;
++	font-size:12px;
++}
++
++.text2 {
++	font-family:verdana;
++	font-size:17px;
++	font-weight:bold;
++	text-decoration:underline;
++}
++
++.textfield {
++	width:255px;
++	height:20px;
++	border:1px solid #000000;
++}
++
++.button {
++	border:1px solid #000000;
++	height:25px;
++}
