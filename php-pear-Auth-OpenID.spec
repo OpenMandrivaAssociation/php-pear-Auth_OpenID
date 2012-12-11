@@ -1,4 +1,8 @@
+%if %{_use_internal_dependency_generator}
+%define __noautoreq 'pear(config.php)'
+%else
 %define		_requires_exceptions 'pear(config.php)'
+%endif
 
 %define		_class		Auth
 %define		_pearname	%{_class}_OpenID
@@ -6,7 +10,7 @@
 Summary:	PHP OpenID
 Name:		php-pear-%{_pearname}
 Version:	2.1.2
-Release:	%mkrel 4
+Release:	6
 Group:		Development/PHP
 License:	Apache License
 URL:		http://www.openidenabled.com/openid/libraries/php
@@ -20,7 +24,6 @@ Requires:	php-mysql
 Requires:	php-bcmath
 BuildArch:	noarch
 BuildRequires:	dos2unix
-BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-buildroot
 
 %description
 An implementation of the OpenID single sign-on authentication protocol.
@@ -34,22 +37,17 @@ http://code.google.com/p/yubico-openid-server/
 %patch0 -p1
 
 # strip away annoying ^M
-find -type f | grep -v ".gif" | grep -v ".png" | grep -v ".jpg" | xargs dos2unix -U
+find -type f | grep -v ".gif" | grep -v ".png" | grep -v ".jpg" | xargs dos2unix
 
 %build
 
 %install
-rm -rf %{buildroot}
-
 install -d %{buildroot}%{_datadir}/pear/%{_class}/OpenID
 install -d %{buildroot}%{_datadir}/pear/%{_class}/Yadis
 
 install -m0644 Auth/OpenID.php %{buildroot}%{_datadir}/pear/%{_class}/
 install -m0644 Auth/OpenID/*.php %{buildroot}%{_datadir}/pear/%{_class}/OpenID/
 install -m0644 Auth/Yadis/*.php %{buildroot}%{_datadir}/pear/%{_class}/Yadis/
-
-%clean
-rm -rf %{buildroot}
 
 %files
 %defattr(644,root,root,755)
@@ -60,3 +58,25 @@ rm -rf %{buildroot}
 %{_datadir}/pear/%{_class}/OpenID/*.php
 %{_datadir}/pear/%{_class}/Yadis/*.php
 
+
+
+%changelog
+* Fri May 27 2011 Oden Eriksson <oeriksson@mandriva.com> 2.1.2-4mdv2011.0
++ Revision: 679262
+- mass rebuild
+
+* Mon Sep 14 2009 Thierry Vignaud <tv@mandriva.org> 2.1.2-3mdv2010.0
++ Revision: 440932
+- rebuild
+
+* Wed Dec 31 2008 Oden Eriksson <oeriksson@mandriva.com> 2.1.2-2mdv2009.1
++ Revision: 321894
+- rebuild
+
+* Tue Sep 16 2008 Oden Eriksson <oeriksson@mandriva.com> 2.1.2-1mdv2009.0
++ Revision: 285169
+- import php-pear-Auth_OpenID
+
+
+* Tue Sep 16 2008 Oden Eriksson <oeriksson@mandriva.com> 2.1.2-1mdv2009.0
+- initial Mandriva package (ATrpms import)
