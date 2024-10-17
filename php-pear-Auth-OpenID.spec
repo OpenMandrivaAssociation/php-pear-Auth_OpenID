@@ -13,7 +13,7 @@ Version:	2.1.2
 Release:	7
 Group:		Development/PHP
 License:	Apache License
-URL:		http://www.openidenabled.com/openid/libraries/php
+URL:		https://www.openidenabled.com/openid/libraries/php
 Source0:	http://openidenabled.com/files/php-openid/packages/php-openid-%{version}.tar.bz2
 Patch0:		php-openid-yubico-0.diff
 Requires(post): php-pear
